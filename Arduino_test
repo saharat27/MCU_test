@@ -1,0 +1,776 @@
+#include <SPI.h>
+#include <avr/pgmspace.h>
+//variant
+  const int CS_PIN = 10;
+  const float R_FIXED = 10000;
+  const float BETA = 3977;
+  const float R0 = 10000;
+  const float T0 = 298;
+  float Vref = 0;
+  #define CMD_BUFFER_SIZE 50
+  char currentCommand[CMD_BUFFER_SIZE];
+  char inputString[CMD_BUFFER_SIZE];
+  volatile bool stringComplete = false;
+  uint8_t inputStringIndex = 0;
+
+//CMD
+  const uint8_t CLRCELL[] PROGMEM = {0x07, 0x11, 0xC9, 0xC0};
+  const uint8_t ADCV[] PROGMEM = {0x03, 0xF0, 0xEB, 0x64};
+  const uint8_t RDCVA[] PROGMEM = {0x00, 0x04, 0x07, 0xC2}; const uint8_t RDCVB[] PROGMEM = {0x00, 0x06, 0x9A, 0x94}; const uint8_t RDCVC[] PROGMEM = {0x00, 0x08, 0x5E, 0x52};
+  const uint8_t RDCVD[] PROGMEM = {0x00, 0x0A, 0xC3, 0x04}; const uint8_t RDCVE[] PROGMEM = {0x00, 0x09, 0xD5, 0x60}; const uint8_t RDCVF[] PROGMEM = {0x00, 0x0B, 0x48, 0x36};
+  const uint8_t ADAX[] PROGMEM = {0x05, 0x60, 0xD3, 0xA0};
+  const uint8_t RDAUXA[] PROGMEM = {0x00, 0x0C, 0xEF, 0xCC}; const uint8_t RDAUXB[] PROGMEM = {0x00, 0x0E, 0x72, 0x9A};
+  const uint8_t RDAUXC[] PROGMEM = {0x00, 0x0D, 0x64, 0xFE}; const uint8_t RDAUXD[] PROGMEM = {0x00, 0x0F, 0xF9, 0xA8};
+  const uint8_t ADSTAT[] PROGMEM = {0x05, 0xE8, 0x7F, 0x88};
+  const uint8_t RDSTATA[] PROGMEM = {0x00, 0x10, 0xED, 0x72}; const uint8_t RDSTATB[] PROGMEM = {0x00, 0x12, 0x70, 0x24};
+
+  const uint8_t bca1[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x01, 0xF0, 0xB7, 0xBA};
+  const uint8_t bcb1[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca2[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x02, 0xF0, 0xA4, 0x5C};
+  const uint8_t bcb2[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca3[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x04, 0xF0, 0x83, 0x90};
+  const uint8_t bcb3[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca4[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x08, 0xF0, 0xCC, 0x08};
+  const uint8_t bcb4[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca5[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x10, 0xF0, 0x53, 0x38};
+  const uint8_t bcb5[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca7[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x40, 0xF0, 0x07, 0xFC};
+  const uint8_t bcb7[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca8[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x80, 0xF0, 0x4F, 0xE2};
+  const uint8_t bcb8[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca9[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF1, 0xB4, 0xC4};
+  const uint8_t bcb9[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca10[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF2, 0xA2, 0xA0};
+  const uint8_t bcb10[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca11[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF4, 0x8E, 0x68};
+  const uint8_t bcb11[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x20};
+  const uint8_t bca13[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF0, 0x3F, 0xF6};
+  const uint8_t bcb13[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x1F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x9F, 0xC4};
+  const uint8_t bca14[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF0, 0x3F, 0xF6}; 
+  const uint8_t bcb14[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x2F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x60, 0xDA};
+  const uint8_t bca15[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF0, 0x3F, 0xF6};
+  const uint8_t bcb15[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x4F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x15, 0xD4};
+  const uint8_t bca16[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF0, 0x3F, 0xF6};
+  const uint8_t bcb16[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x8F, 0x08, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xC8};
+  const uint8_t bca17[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF0, 0x3F, 0xF6};
+  const uint8_t bcb17[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x09, 0x00, 0x00, 0x00, 0x00, 0x83, 0xF0};
+  const uint8_t bca18[] PROGMEM = {0x00, 0x01, 0x3D, 0x6E, 0xF8, 0x00, 0xF0, 0xFF, 0x00, 0xF0, 0x3F, 0xF6};
+  const uint8_t bcb18[] PROGMEM = {0x00, 0x24, 0xB1, 0x9E, 0x0F, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x58, 0xB2};
+
+//variant
+  uint16_t dataRDCVA[6]; uint16_t dataRDCVB[6]; uint16_t dataRDCVC[6];
+  uint16_t dataRDCVD[6]; uint16_t dataRDCVE[6]; uint16_t dataRDCVF[6];
+  float voltRDCVA[3]; float voltRDCVB[3]; float voltRDCVC[3];
+  float voltRDCVD[3]; float voltRDCVE[3]; float voltRDCVF[3];
+  uint16_t rawRDCVA[3]; uint16_t rawRDCVB[3]; uint16_t rawRDCVC[3];
+  uint16_t rawRDCVD[3]; uint16_t rawRDCVE[3]; uint16_t rawRDCVF[3];
+
+  uint16_t dataRDAUXA[6]; uint16_t dataRDAUXB[6]; uint16_t dataRDAUXC[6]; uint16_t dataRDAUXD[6];
+  float voltRDAUXA[3]; float voltRDAUXB[3]; float voltRDAUXC[3]; float voltRDAUXD[3];
+  uint16_t rawRDAUXA[3]; uint16_t rawRDAUXB[3]; uint16_t rawRDAUXC[3]; uint16_t rawRDAUXD[3];
+  float tempRDAUXA[3]; float tempRDAUXB[3]; float tempRDAUXC[3]; float tempRDAUXD[3];
+
+  uint16_t dataRDSTATA[18]; uint16_t dataRDSTATB[18];
+  float voltRDSTATAm[3]; float voltRDSTATAs[3]; float voltRDSTATBm[3]; float voltRDSTATBs[3];
+  uint16_t rawRDSTATAm[3]; uint16_t rawRDSTATAs[3]; uint16_t rawRDSTATBm[3]; uint16_t rawRDSTATBs[3];
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  pinMode(CS_PIN, OUTPUT);
+  digitalWrite(CS_PIN, HIGH);
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+  inputString[0] = '\0'; // เริ่มต้น
+  currentCommand[0] = '\0';
+  wakeup1();
+  delay(10);
+}
+
+void loop() {
+  if (stringComplete) {
+    if (inputStringIndex > 0 && (inputString[inputStringIndex-1] == '\n' || inputString[inputStringIndex-1] == '\r')) {
+        inputString[inputStringIndex-1] = '\0';
+        if (inputStringIndex > 1 && (inputString[inputStringIndex-2] == '\r' || inputString[inputStringIndex-2] == '\n')) {
+            inputString[inputStringIndex-2] = '\0';
+        }
+    }
+    
+    strlcpy(currentCommand, inputString, CMD_BUFFER_SIZE);
+    
+    Serial.print(F("Command set to: "));
+    Serial.println(currentCommand);
+    
+    inputString[0] = '\0';
+    inputStringIndex = 0;
+    stringComplete = false;
+  }
+
+  if (strcmp(currentCommand, "wob") == 0) {
+    Serial.println(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin_wob"));
+    sendcmd(CLRCELL, sizeof(CLRCELL));
+    sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+    readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+    sendcmd(ADAX, sizeof(ADAX)); delayMicroseconds(350);
+    readRDAUXA(); readRDAUXB(); readRDAUXC(); readRDAUXD();
+    wakeup2();
+    sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+    sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+    statuscell(); statustemp(); statusoverall();
+    Serial.println(F("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"));
+    delay(1000);
+    checkSerialInput(); 
+  }
+  else if (strcmp(currentCommand, "bc1") == 0) {
+    const char* BC1_COMMAND_EXPECTED = "bc1";
+    for (int i = 0; i < 1; i++) {
+      Serial.println(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin_bc1"));
+      checkSerialInput(); if (stringComplete) { Serial.println(F("BC1: Pending command, exiting.")); return; }
+      if (strcmp(currentCommand, BC1_COMMAND_EXPECTED) != 0) { Serial.println(F("BC1: Command changed, exiting.")); return; }
+      wakeup3(); sendcmd(bca1, sizeof(bca1)); wakeup3(); sendcmd(bcb1, sizeof(bcb1));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);   
+    }
+  }
+  else if (strcmp(currentCommand, "bc2") == 0) {
+    const char* BC2_COMMAND_EXPECTED = "bc2";
+    for (int i = 0; i < 1; i++) {
+      Serial.println(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin_bc2"));
+      checkSerialInput(); if (stringComplete) { Serial.println(F("BC2: Pending command, exiting.")); return; }
+      if (strcmp(currentCommand, BC2_COMMAND_EXPECTED) != 0) { Serial.println(F("BC2: Command changed, exiting.")); return; }
+      wakeup3(); sendcmd(bca2, sizeof(bca2)); wakeup3(); sendcmd(bcb2, sizeof(bcb2));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);          
+    }
+  } 
+  else if (strcmp(currentCommand, "bc3") == 0) {
+    const char* BC3_COMMAND_EXPECTED = "bc3";
+    for (int i = 0; i < 1; i++) {
+      Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+      checkSerialInput(); if (stringComplete) { Serial.println(F("BC3: Pending command, exiting.")); return; }
+      if (strcmp(currentCommand, BC3_COMMAND_EXPECTED) != 0) { Serial.println(F("BC3: Command changed, exiting.")); return; }
+      Serial.println(F("_bc3"));
+      wakeup3(); sendcmd(bca3, sizeof(bca3)); wakeup3(); sendcmd(bcb3, sizeof(bcb3));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  } 
+  else if (strcmp(currentCommand, "bc4") == 0) {
+    const char* BC4_COMMAND_EXPECTED = "bc4";
+    for (int i = 0; i < 1; i++) {
+      Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command, exiting.")); return; }
+      if (strcmp(currentCommand, BC4_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc4 stage.")); return; }
+      Serial.println(F("_bc4"));
+      wakeup3(); sendcmd(bca4, sizeof(bca4)); wakeup3(); sendcmd(bcb4, sizeof(bcb4));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  } 
+  else if (strcmp(currentCommand, "bc5") == 0) {
+    const char* BC5_COMMAND_EXPECTED = "bc5";
+    for (int i = 0; i < 1; i++) {
+      Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command, exiting.")); return; }
+      if (strcmp(currentCommand, BC5_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc5 stage.")); return; }
+      Serial.println(F("_bc5"));
+      wakeup3(); sendcmd(bca5, sizeof(bca5)); wakeup3(); sendcmd(bcb5, sizeof(bcb5));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+  else if (strcmp(currentCommand, "bc7") == 0) {
+    const char* BC7_COMMAND_EXPECTED = "bc7";
+    for (int i = 0; i < 1; i++) {
+      Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+      if (strcmp(currentCommand, BC7_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc7 stage.")); return; }
+      Serial.println(F("_bc7"));
+      wakeup3(); sendcmd(bca7, sizeof(bca7)); wakeup3(); sendcmd(bcb7, sizeof(bcb7));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  } 
+  else if (strcmp(currentCommand, "bc8") == 0) {
+    const char* BC8_COMMAND_EXPECTED = "bc8";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC8_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc8 stage.")); return; }
+      Serial.println(F("_bc8"));
+      wakeup3(); sendcmd(bca8, sizeof(bca8)); wakeup3(); sendcmd(bcb8, sizeof(bcb8));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+  else if (strcmp(currentCommand, "bc9") == 0) {
+    const char* BC9_COMMAND_EXPECTED = "bc9";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC9_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc9 stage.")); return; }
+      Serial.println(F("_bc9"));
+      wakeup3(); sendcmd(bca9, sizeof(bca9)); wakeup3(); sendcmd(bcb9, sizeof(bcb9));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+  else if (strcmp(currentCommand, "bc10") == 0) {
+    const char* BC10_COMMAND_EXPECTED = "bc10";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC10_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc10 stage.")); return; }
+      Serial.println(F("_bc10"));
+      wakeup3(); sendcmd(bca10, sizeof(bca10)); wakeup3(); sendcmd(bcb10, sizeof(bcb10));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  } 
+  else if (strcmp(currentCommand, "bc11") == 0) {
+    const char* BC11_COMMAND_EXPECTED = "bc11";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC11_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc11 stage.")); return; }
+      Serial.println(F("_bc11"));
+      wakeup3(); sendcmd(bca11, sizeof(bca11)); wakeup3(); sendcmd(bcb11, sizeof(bcb11));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+  else if (strcmp(currentCommand, "bc13") == 0) {
+    const char* BC13_COMMAND_EXPECTED = "bc13";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC13_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc13 stage.")); return; }
+      Serial.println(F("_bc13"));
+      wakeup3(); sendcmd(bca13, sizeof(bca13)); wakeup3(); sendcmd(bcb13, sizeof(bcb13));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  } 
+  else if (strcmp(currentCommand, "bc14") == 0) {
+    const char* BC14_COMMAND_EXPECTED = "bc14";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC14_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc14 stage.")); return; }
+      Serial.println(F("_bc14"));
+      wakeup3(); sendcmd(bca14, sizeof(bca14)); wakeup3(); sendcmd(bcb14, sizeof(bcb14));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+  else if (strcmp(currentCommand, "bc15") == 0) {
+    const char* BC15_COMMAND_EXPECTED = "bc15";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC15_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc15 stage.")); return; }
+      Serial.println(F("_bc15"));
+      wakeup3(); sendcmd(bca15, sizeof(bca15)); wakeup3(); sendcmd(bcb15, sizeof(bcb15));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  } 
+  else if (strcmp(currentCommand, "bc16") == 0) {
+    const char* BC16_COMMAND_EXPECTED = "bc16";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC16_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc16 stage.")); return; }
+      Serial.println(F("_bc16"));
+      wakeup3(); sendcmd(bca16, sizeof(bca16)); wakeup3(); sendcmd(bcb16, sizeof(bcb16));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End_bc16<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+  else if (strcmp(currentCommand, "bc17") == 0) {
+    const char* BC17_COMMAND_EXPECTED = "bc17";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC17_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc17 stage.")); return; }
+      Serial.println(F("_bc17"));
+      wakeup3(); sendcmd(bca17, sizeof(bca17)); wakeup3(); sendcmd(bcb17, sizeof(bcb17));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End_bc17<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+  else if (strcmp(currentCommand, "bc18") == 0) {
+    const char* BC18_COMMAND_EXPECTED = "bc18";
+    for (int i = 0; i < 1; i++) {
+    Serial.print(F(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Begin"));
+    if (strcmp(currentCommand, BC18_COMMAND_EXPECTED) != 0) { Serial.println(F("WB: Command changed, exiting bc18 stage.")); return; }
+      Serial.println(F("_bc18"));
+      wakeup3(); sendcmd(bca18, sizeof(bca18)); wakeup3(); sendcmd(bcb18, sizeof(bcb18));
+      delay(10);
+      sendcmd(CLRCELL, sizeof(CLRCELL));
+      sendcmd(ADCV, sizeof(ADCV)); delayMicroseconds(200);
+      readRDCVA(); readRDCVB(); readRDCVC(); readRDCVD(); readRDCVE(); readRDCVF();
+      wakeup2();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATA();
+      sendcmd(ADSTAT, sizeof(ADSTAT)); delayMicroseconds(200); readRDSTATB();
+      statuscell(); statustemp(); statusoverall();
+      checkSerialInput(); if (stringComplete) { Serial.println(F("WB: Pending command during delay, exiting.")); return; }
+      Serial.println("End_bc18<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      delay(1000);
+    }
+  }
+}
+
+void sendcmd(const uint8_t cmd[], uint8_t counti){
+  digitalWrite(CS_PIN, LOW);
+  for (uint8_t i = 0; i < counti; i++) { 
+    SPI.transfer(pgm_read_byte_near(cmd + i));
+  }
+  digitalWrite(CS_PIN, HIGH); 
+}
+
+// ---------- RDCVA ----------
+void readRDCVA(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x04); SPI.transfer(0x07); SPI.transfer(0xC2);
+  uint8_t data[6];
+  for (int i = 0; i < 6; i++) {
+    dataRDCVA[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDCVB ----------
+void readRDCVB(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x06); SPI.transfer(0x9A); SPI.transfer(0x94);
+  uint8_t data[6];
+  for (int i = 0; i < 6; i++) {
+    dataRDCVB[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDCVC ----------
+void readRDCVC(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x08); SPI.transfer(0x5E); SPI.transfer(0x52);
+  uint8_t data[6];
+  for (int i = 0; i < 6; i++) {
+    dataRDCVC[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDCVD ----------
+void readRDCVD(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x0A); SPI.transfer(0xC3); SPI.transfer(0x04);
+  uint8_t data[6];
+  for (int i = 0; i < 6; i++) {
+    dataRDCVD[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDCVE ----------
+void readRDCVE(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x09); SPI.transfer(0xD5); SPI.transfer(0x60);
+  uint8_t data[6];
+  for (int i = 0; i < 6; i++) {
+    dataRDCVE[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDCVF ----------
+void readRDCVF(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x0B); SPI.transfer(0x48); SPI.transfer(0x36);
+  uint8_t data[6];
+  for (int i = 0; i < 6; i++) {
+    dataRDCVF[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDAUXA ----------
+void readRDAUXA(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x0C); SPI.transfer(0xEF); SPI.transfer(0xCC);
+  for (int i = 0; i < 6; i++) {
+    dataRDAUXA[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH); 
+}
+
+// ---------- RDAUXB ----------
+void readRDAUXB(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x0E); SPI.transfer(0x72); SPI.transfer(0x9A);
+  for (int i = 0; i < 6; i++) {
+    dataRDAUXB[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDAUXC ----------
+void readRDAUXC(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x0D); SPI.transfer(0x64); SPI.transfer(0xFE);
+  for (int i = 0; i < 6; i++) {
+    dataRDAUXC[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDAUXD ----------
+void readRDAUXD(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x0F); SPI.transfer(0xF9); SPI.transfer(0xA8);
+  for (int i = 0; i < 6; i++) {
+    dataRDAUXD[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDSTATA ----------
+void readRDSTATA(){
+  digitalWrite(CS_PIN, LOW);
+  SPI.transfer(0x00); SPI.transfer(0x10); SPI.transfer(0xED); SPI.transfer(0x72);
+  for (int i = 0; i < 16; i++) {
+    dataRDSTATA[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+}
+
+// ---------- RDSTATB ----------
+void readRDSTATB(){
+  digitalWrite(CS_PIN, LOW);   
+  SPI.transfer(0x00); SPI.transfer(0x12); SPI.transfer(0x70); SPI.transfer(0x24);
+  for (int i = 0; i < 16; i++) {
+    dataRDSTATB[i] = SPI.transfer(0x00);
+  }
+  digitalWrite(CS_PIN, HIGH);
+} 
+
+void calRDCVx(uint8_t counti, uint16_t data[], float cal_volt[], uint16_t hraw[]){
+  for (uint8_t i=0;i < counti; i++) {
+  uint16_t raw = ((uint16_t)data[2 * i + 1] << 8) | data[2 * i];
+  float voltage = raw * 0.0001;
+	cal_volt[i] = voltage;
+  hraw[i] = raw;
+  }
+}
+
+void calRDAUXx(uint8_t counti, uint16_t data[], float cal_volt[], uint16_t hraw[], float cal_temp[], char NameTag[10]) {
+  for (int i = 0; i < counti; i++) {
+    uint16_t raw = ((uint16_t)data[2 * i + 1] << 8) | data[2 * i];
+    float voltage = raw * 0.0001;
+    float temperature = voltageToTemp(voltage);
+    cal_volt[i] = voltage;
+    hraw[i] = raw;
+    cal_temp[i] = temperature;
+    if (i == 2 && NameTag == "RDAUXB") {Vref = cal_volt[i];}
+  }
+}
+
+void calRDSTATx(uint16_t data[],char NameTag[10]){
+  if(NameTag=="a"){
+    for (int i = 2; i < 3; i++) {
+      uint16_t raw = ((uint16_t)data[2 * i + 1] << 8) | data[2 * i];
+      float voltage = raw * 0.0001;
+      Serial.print(F("MCU1_APs->")); Serial.print(voltage, 4); Serial.print(F("V"));
+      Serial.print(F(" (0x")); Serial.print(raw, HEX); Serial.print(F(") "));
+    }
+    Serial.print(F("   "));
+    for (int i = 2; i < 3; i++) {
+      uint16_t raw = ((uint16_t)data[2 * i + 1 + 8] << 8) | data[2 * i + 8];
+      float voltage = raw * 0.0001;
+      Serial.print(F("MCU2_APs->")); Serial.print(voltage, 4); Serial.print(F("V"));
+      Serial.print(F(" (0x")); Serial.print(raw, HEX); Serial.print(F(") "));
+    }
+    Serial.println();
+  }
+    if(NameTag=="b"){
+    for (int i = 0; i < 1; i++) {
+      uint16_t raw = ((uint16_t)data[2 * i + 1] << 8) | data[2 * i];
+      float voltage = raw * 0.0001;
+      Serial.print(F("MCU1_DPs->")); Serial.print(voltage, 4); Serial.print(F("V"));
+      Serial.print(F(" (0x")); Serial.print(raw, HEX); Serial.print(F(") "));
+    }
+    Serial.print(F("   "));
+    for (int i = 0; i < 1; i++) {
+      uint16_t raw = ((uint16_t)data[2 * i + 1 + 8] << 8) | data[2 * i + 8];
+      float voltage = raw * 0.0001;
+      Serial.print(F("MCU2_DPs->")); Serial.print(voltage, 4); Serial.print(F("V"));
+      Serial.print(F(" (0x")); Serial.print(raw, HEX); Serial.print(F(") "));
+    }
+    Serial.println();
+  }
+}
+
+void calallcell(uint16_t data[]){
+  uint16_t sc_raw = data[1] << 8 | data[0];
+  float total_voltage = sc_raw * (0.0001 * 30);
+  Serial.print(F("Sum of All Cells->")); Serial.print(total_voltage, 4); Serial.println(F("V"));
+
+  uint16_t itmp1 = (uint16_t)data[3] << 8 | data[2];
+  float volt1 = itmp1*0.0001;
+  float temp1 = (volt1 / 0.0076)-276;
+  Serial.print(F("Master Internal Die->")); Serial.print(temp1, 3); Serial.println(F("C"));
+
+  uint16_t itmp2 = (uint16_t)data[3+8] << 8 | data[2+8];
+  float volt2 = itmp2*0.0001;
+  float temp2 = (volt2 / 0.0076)-276;
+  Serial.print(F("Slave Internal Die->")); Serial.print(temp2, 3); Serial.println(F("C"));
+}
+
+float voltageToTemp(float Vout) {
+  if (Vref <= 0 || Vout <= 0.0 || Vout >= Vref) return -999.0;
+  float R_therm = (Vout * R_FIXED) / (Vref - Vout);
+  float tempK = (1/ (1/ T0 + (log(R_therm / R0)) / BETA))  ;
+  float tempC = tempK - 273.15;
+  return tempC;
+}
+
+void printRDCVx(uint8_t counti,char NameTag[10], float volt[], uint16_t raw[], uint8_t num){
+  Serial.print(NameTag); Serial.print(F(" ="));
+  for (uint8_t i = 0; i < counti; i++) {
+    Serial.print(F(" cell_")); Serial.print(i+num); Serial.print(F("->")); Serial.print(volt[i], 4);
+    Serial.print(F("V"));
+  }
+  Serial.println(F(""));
+}
+
+void printRDCVxx(uint8_t point,char NameTag[10], float volt[], uint16_t raw[], uint8_t num){
+  Serial.print(NameTag); Serial.print(F(" ="));
+  uint8_t i = point;
+  Serial.print(F(" cell_")); Serial.print(num); Serial.print(F("->")); Serial.print(volt[i], 4); Serial.println(F("V"));
+}
+
+void printRDAUXx(uint8_t counti, float volt[], uint16_t raw[], float temp[], uint8_t sNameTag) {
+  for (uint8_t i = 0; i < counti; i++) {
+    if(i==2 && sNameTag == 4) {
+      Serial.print(F("Vref2 = ")); Serial.print(volt[i], 4); Serial.println(F("V"));
+      }
+    else {
+      Serial.print(F("GPIO")); Serial.print(i + sNameTag); Serial.print(F(": ")); Serial.print(volt[i], 4);
+      Serial.print(F("V  |  Temp->")); Serial.print(temp[i], 2); Serial.println(F("C"));
+      }   
+  }
+}
+
+void printRDSTATx(uint8_t counti,char NameTag[10], float volt[], uint16_t raw[]) {
+  Serial.print(NameTag); Serial.print(F(" ="));
+  for (uint8_t i = 0; i < counti; i++) {
+    Serial.print(F("C")); Serial.print(i + 1); Serial.print(F("->")); Serial.print(volt[i], 4);
+  }
+  Serial.println(F(""));
+}
+
+void statuscell() {
+//Cal&print RDCVA - RDCVF
+  calRDCVx(3, dataRDCVA, voltRDCVA, rawRDCVA); calRDCVx(3, dataRDCVB, voltRDCVB, rawRDCVB);
+  calRDCVx(3, dataRDCVC, voltRDCVC, rawRDCVC); calRDCVx(3, dataRDCVD, voltRDCVD, rawRDCVD);
+  calRDCVx(3, dataRDCVE, voltRDCVE, rawRDCVE); calRDCVx(3, dataRDCVF, voltRDCVF, rawRDCVF);
+  printRDCVx(3, "RDCVA", voltRDCVA, rawRDCVA, 1); printRDCVx(2, "RDCVB", voltRDCVB, rawRDCVB, 4);
+  printRDCVx(3, "RDCVC", voltRDCVC, rawRDCVC, 7); printRDCVx(2, "RDCVD", voltRDCVD, rawRDCVD, 10);
+  printRDCVx(3, "RDCVE", voltRDCVE, rawRDCVE, 13); printRDCVx(3, "RDCVF", voltRDCVF, rawRDCVF, 16);
+}
+
+void statustemp() {
+//Cal&print RDAUXA - RDAUXD
+  calRDAUXx(3, dataRDAUXA, voltRDAUXA, rawRDAUXA, tempRDAUXA, "RDAUXA");
+  calRDAUXx(3, dataRDAUXB, voltRDAUXB, rawRDAUXB, tempRDAUXB, "RDAUXB");
+  calRDAUXx(3, dataRDAUXC, voltRDAUXC, rawRDAUXC, tempRDAUXC, "RDAUXC");
+  calRDAUXx(1, dataRDAUXD, voltRDAUXD, rawRDAUXD, tempRDAUXD, "RDAUXD");
+  printRDAUXx(3, voltRDAUXA, rawRDAUXA, tempRDAUXA, 1);
+  printRDAUXx(3, voltRDAUXB, rawRDAUXB, tempRDAUXB, 4);
+  printRDAUXx(3, voltRDAUXC, rawRDAUXC, tempRDAUXC, 6);
+  printRDAUXx(1, voltRDAUXD, rawRDAUXD, tempRDAUXD, 9);
+}
+
+void statusoverall() {
+//Cal&print RDSTATA, RDSTATB
+  calRDSTATx(dataRDSTATA, "a");
+  calRDSTATx(dataRDSTATB, "b");
+  calallcell(dataRDSTATA);
+}
+
+void wakeup1() {
+  digitalWrite(CS_PIN, LOW); delayMicroseconds(10);
+  digitalWrite(CS_PIN, HIGH); delayMicroseconds(10);
+}
+
+void wakeup2() {
+  digitalWrite(CS_PIN, LOW); delay(300);
+  digitalWrite(CS_PIN, HIGH); delay(10);
+}
+
+void wakeup3() {
+  digitalWrite(CS_PIN, LOW); delay(1);
+  digitalWrite(CS_PIN, HIGH);
+}
+
+void serialEvent() {
+  while (Serial.available()) {
+    char inChar = (char)Serial.read();
+    if (inChar == '\n' || inChar == '\r') {
+      if (inputStringIndex > 0) {
+        inputString[inputStringIndex] = '\0';
+      stringComplete = true;
+      }
+      return;
+    } else {
+      if (inputStringIndex < CMD_BUFFER_SIZE - 1) {
+        inputString[inputStringIndex++] = inChar;
+      }
+    }
+  }
+}
+
+void checkSerialInput() {
+  if (stringComplete) {
+    if (inputStringIndex > 0 && (inputString[inputStringIndex-1] == '\n' || inputString[inputStringIndex-1] == '\r')) {
+        inputString[inputStringIndex-1] = '\0';
+        if (inputStringIndex > 1 && (inputString[inputStringIndex-2] == '\r' || inputString[inputStringIndex-2] == '\n')) {
+            inputString[inputStringIndex-2] = '\0';
+        }
+    }
+    
+    strlcpy(currentCommand, inputString, CMD_BUFFER_SIZE);
+    
+    Serial.print(F("Command set to: "));
+    Serial.println(currentCommand);
+    
+    inputString[0] = '\0';
+    inputStringIndex = 0;
+    stringComplete = false;
+  }
+}
