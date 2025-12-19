@@ -1,55 +1,66 @@
 import serial
 import time
 
-PORT = 'COM3'
-BAUD = 115200
+PORT = 'COM11'
+BAUD = 9600
 ROUNDS = 3
-FILENAME = r'C:\Users\VICTUS\Downloads\MCU\data\data1.txt'
+FILENAME = r'Z:\Common Data for Line\ICT\Trainee\Kaorad\python\MCU\text\data1.txt'
 
-ser = serial.Serial(PORT, BAUD, timeout=1)
+ser = serial.Serial(PORT, BAUD, timeout=2)
 time.sleep(2)
+
 
 def read_block(cmd):
     buffer = []
-    ser.write(cmd.encode())
-    time.sleep(0.1)
+    ser.write((cmd + '\n').encode())
+    time.sleep(0.2)
 
     while True:
         line = ser.readline()
-        if line:
-            value = line.decode('utf-8', errors='ignore').strip()
-            print('Read:', value)
-            buffer.append(value)
+        if not line:
+            continue
 
-            if "End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" in value:
-                break
+        value = line.decode('utf-8', errors='ignore').strip()
+        print('Read:', value)
+        buffer.append(value)
+
+        if "End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" in value:
+            break
+        if value.startswith("End_bc"):
+            break
+
     return buffer
 
-
 try:
-    last_c_data = []
-    last_d_data = []
 
-
-    for i in range(1, ROUNDS + 1):
-        print(f"\nread c round {i}")
-        data = read_block('c')
-        if i == ROUNDS:
-            last_c_data = data  
-
+    last_wob_data = []
+    last_bc_data = {} 
 
     for i in range(1, ROUNDS + 1):
-        print(f"\nread d round{i}")
-        data = read_block('d')
-        if i == ROUNDS:
-            last_d_data = data  
+        print(f"\nRead WOB round {i}")
+        data = read_block('wob')
 
+        if i == ROUNDS:
+            last_wob_data = data
+
+    for bc in range(1, 19):
+        for i in range(1, ROUNDS + 1):
+            print(f"\nRead BC{bc} round {i}")
+            data = read_block(f'bc{bc}')
+
+            if i == ROUNDS:
+                last_bc_data[f'bc{bc}'] = data
 
     with open(FILENAME, 'w', encoding='utf-8') as file:
-        file.write("===== LAST ROUND : C =====\n")
-        file.write("\n".join(last_c_data))
-        file.write("\n\n===== LAST ROUND : D =====\n")
-        file.write("\n".join(last_d_data))
+        file.write("===== WOB =====\n")
+        file.write("\n".join(last_wob_data))
+        file.write("\n\n")
+
+        for bc in range(1, 19):
+            key = f'bc{bc}'
+            file.write(f"===== {key.upper()} =====\n")
+            file.write("\n".join(last_bc_data.get(key, [])))
+            file.write("\n\n")
 
 finally:
     ser.close()
