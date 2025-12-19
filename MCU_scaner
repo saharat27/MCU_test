@@ -2,75 +2,80 @@ import serial
 import time
 import os
 
-
-ARDUINO_PORT = 'COM3'
-ARDUINO_BAUD = 115200
-
-SCANNER_PORT = 'COM7'
-SCANNER_BAUD = 9600 
-
+PORT = 'COM11'
+BAUD = 9600
 ROUNDS = 3
-SAVE_DIR = r'C:\Users\VICTUS\Downloads\MCU\data'
+SAVE_DIR = r'Z:\Common Data for Line\ICT\Trainee\Kaorad\python\MCU\text'
 
-try:
-    scanner = serial.Serial(SCANNER_PORT, SCANNER_BAUD, timeout=10)
-    print("กรุณาแสกนบาร์โค้ด...")
-    barcode = scanner.readline().decode('utf-8', errors='ignore').strip()
-    scanner.close()
-except Exception as e:
-    print("ไม่สามารถอ่าน Scanner:", e)
-    exit()
+ser = serial.Serial(PORT, BAUD, timeout=2)
+time.sleep(2)
 
-barcode = barcode.replace('/', '_').replace('\\', '_')
-FILENAME = os.path.join(SAVE_DIR, f"{barcode}.txt")
-print("ชื่อไฟล์ที่จะบันทึก:", FILENAME)
-
-try:
-    ser = serial.Serial(ARDUINO_PORT, ARDUINO_BAUD, timeout=1)
-    time.sleep(2)
-except Exception as e:
-    print("ไม่สามารถเปิด Serial Arduino:", e)
-    exit()
-
-def read_block(cmd):
+def read_block(cmd, timeout=5):
     buffer = []
-    ser.write(cmd.encode())
-    time.sleep(0.1)
+    ser.write((cmd + '\n').encode())
+    start_time = time.time()
 
     while True:
+        if time.time() - start_time > timeout:
+            print(f"Timeout for {cmd}, skipping...")
+            break
+
         line = ser.readline()
-        if line:
-            value = line.decode('utf-8', errors='ignore').strip()
+        if not line:
+            continue
+
+        value = line.decode('utf-8', errors='ignore').strip()
+        if value:
             print('Read:', value)
             buffer.append(value)
 
-            if "End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" in value:
-                break
+        if "End<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" in value:
+            break
+        if value.startswith("End_bc"):
+            break
+
     return buffer
 
 try:
-    last_c_data = []
-    last_d_data = []
+    qr_code = input("Scanner: ").strip()
+
+    qr_code = qr_code.replace('/', '_').replace('\\', '_')
+
+    FILENAME = os.path.join(SAVE_DIR, f"{qr_code}.txt")
+
+    last_wob_data = []
+    last_bc_data = {}
 
     for i in range(1, ROUNDS + 1):
-        print(f"\nอ่าน c รอบ {i}")
-        data = read_block('c')
-        if i == ROUNDS:
-            last_c_data = data
+        print(f"\nRead WOB round {i}")
+        data = read_block('wob')
+        if data:
+            if i == ROUNDS:
+                last_wob_data = data
+        else:
+            print("No data from WOB, skipping...")
 
-    for i in range(1, ROUNDS + 1):
-        print(f"\nอ่าน d รอบ {i}")
-        data = read_block('d')
-        if i == ROUNDS:
-            last_d_data = data
+    for bc in range(1, 19):
+        for i in range(1, ROUNDS + 1):
+            print(f"\nRead BC{bc} round {i}")
+            data = read_block(f'bc{bc}')
+            if data:
+                if i == ROUNDS:
+                    last_bc_data[f'bc{bc}'] = data
+            else:
+                print(f"No data from BC{bc}, skipping this BC...")
+                break
 
     with open(FILENAME, 'w', encoding='utf-8') as file:
-        file.write(f"Barcode: {barcode}\n")
-        file.write("===== LAST ROUND : C =====\n")
-        file.write("\n".join(last_c_data))
-        file.write("\n\n===== LAST ROUND : D =====\n")
-        file.write("\n".join(last_d_data))
+        file.write("===== WOB =====\n")
+        file.write("\n".join(last_wob_data))
+        file.write("\n")
 
+        for bc in range(1, 19):
+            key = f'bc{bc}'
+            file.write(f"===== {key.upper()} =====\n")
+            file.write("\n".join(last_bc_data.get(key, [])))
+            file.write("\n")
 finally:
     ser.close()
-    print("\nบันทึกไฟล์เรียบร้อยที่:", FILENAME)
+    print("\nSaved to", FILENAME)
